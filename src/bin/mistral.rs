@@ -23,11 +23,6 @@ fn main() -> Result<()> {
     );
 
     let stop_watch = Instant::now();
-    let tokenizer_path = PathBuf::from(args.tokenizer);
-    let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(Error::msg)?;
-    info!("Loaded the tokenizer in {:?}", stop_watch.elapsed());
-
-    let stop_watch = Instant::now();
     let model_path = PathBuf::from(args.model);
     let mut model_reader = File::open(&model_path)?;
     let model_content =
@@ -35,10 +30,15 @@ fn main() -> Result<()> {
     let model_weights = quantized_llama::ModelWeights::from_gguf(model_content, &mut model_reader)?;
     info!("Loaded the model weights in {:?}", stop_watch.elapsed());
 
+    let stop_watch = Instant::now();
+    let tokenizer_path = PathBuf::from(args.tokenizer);
+    let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(Error::msg)?;
+    info!("Loaded the tokenizer in {:?}", stop_watch.elapsed());
+
     let logits_processor = LogitsProcessor::new(args.seed, args.temperature, args.top_p);
     let mut text_generation = TextGeneration::new(
-        tokenizer,
         model_weights,
+        tokenizer,
         logits_processor,
         args.repeat_penalty,
         args.repeat_last_n,
@@ -61,14 +61,6 @@ struct Args {
     #[arg(short = 'n', long, default_value_t = 100)]
     sample_len: usize,
 
-    /// the path of tokenizer file(in json format)
-    #[arg(
-        long,
-        short = 't',
-        default_value = "model/Mistral-7B-Instruct-v0.2/tokenizer.json"
-    )]
-    tokenizer: String,
-
     /// the path of model file(in gguf format)
     #[arg(
         long,
@@ -76,6 +68,14 @@ struct Args {
         default_value = "model/Mistral-7B-Instruct-v0.2/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
     )]
     model: String,
+
+    /// the path of tokenizer file(in json format)
+    #[arg(
+        long,
+        short = 't',
+        default_value = "model/Mistral-7B-Instruct-v0.2/tokenizer.json"
+    )]
+    tokenizer: String,
 
     /// The seed to use when generating random samples.
     #[arg(long, default_value_t = 299792458)]
@@ -106,8 +106,8 @@ enum Prompt {
 }
 
 pub struct TextGeneration {
-    token_output_stream: TokenOutputStream,
     model_weights: quantized_llama::ModelWeights,
+    token_output_stream: TokenOutputStream,
     logits_processor: LogitsProcessor,
     repeat_penalty: f32,
     repeat_last_n: usize,
@@ -116,8 +116,8 @@ pub struct TextGeneration {
 impl TextGeneration {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        tokenizer: Tokenizer,
         model_weights: quantized_llama::ModelWeights,
+        tokenizer: Tokenizer,
         logits_processor: LogitsProcessor,
         repeat_penalty: f32,
         repeat_last_n: usize,
